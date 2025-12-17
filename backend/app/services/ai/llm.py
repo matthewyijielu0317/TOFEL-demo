@@ -3,9 +3,12 @@
 import httpx
 import json
 import base64
+import tempfile
+import os
 from app.config import settings
 from pydantic import BaseModel, Field
 from openai import AsyncOpenAI
+from pydub import AudioSegment
 
 
 # --- V2 Schemas for Content-Aware Chunking ---
@@ -264,12 +267,35 @@ async def analyze_full_audio(audio_url: str, question_text: str) -> str:
     
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     
-    # Download and encode audio
+    # Download audio
     async with httpx.AsyncClient() as http_client:
         response = await http_client.get(audio_url)
         response.raise_for_status()
         audio_bytes = response.content
-    audio_base64 = base64.b64encode(audio_bytes).decode()
+    
+    # Convert to mp3 if needed (OpenAI requires mp3 format)
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as temp_input:
+        temp_input.write(audio_bytes)
+        temp_input_path = temp_input.name
+    
+    temp_output_path = None
+    try:
+        # Load audio and convert to mp3
+        audio = AudioSegment.from_file(temp_input_path)
+        
+        # Export as mp3
+        temp_output_path = temp_input_path.replace('.webm', '.mp3')
+        audio.export(temp_output_path, format="mp3")
+        
+        # Read mp3 file and encode to base64
+        with open(temp_output_path, 'rb') as mp3_file:
+            audio_base64 = base64.b64encode(mp3_file.read()).decode()
+    finally:
+        # Cleanup temp files
+        if os.path.exists(temp_input_path):
+            os.remove(temp_input_path)
+        if temp_output_path and os.path.exists(temp_output_path):
+            os.remove(temp_output_path)
     
     # Call Audio GPT
     completion = await client.chat.completions.create(
@@ -338,11 +364,13 @@ async def analyze_chunk_audio(
     
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     
-    # Download and encode chunk audio
+    # Download chunk audio
     async with httpx.AsyncClient() as http_client:
         response = await http_client.get(chunk_audio_url)
         response.raise_for_status()
         audio_bytes = response.content
+    
+    # Chunk audio is already mp3 (from pydub export), so just encode
     audio_base64 = base64.b64encode(audio_bytes).decode()
     
     # Chunk-specific prompts

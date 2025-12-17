@@ -130,13 +130,19 @@ async def segment_audio_by_chunks(
         audio_bytes = response.content
     
     # Save to temp file for pydub
-    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
+    # Note: Frontend uploads webm format, so we need to handle that
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as temp_file:
         temp_file.write(audio_bytes)
         temp_path = temp_file.name
     
     try:
-        # Load audio with pydub
-        audio = AudioSegment.from_file(temp_path, format="mp3")
+        # Load audio with pydub - let it auto-detect format or try webm
+        try:
+            audio = AudioSegment.from_file(temp_path)
+        except Exception as e:
+            # If auto-detect fails, try explicitly with webm
+            print(f"Auto-detect failed, trying webm: {e}")
+            audio = AudioSegment.from_file(temp_path, format="webm")
         
         object_keys = []
         for i, chunk in enumerate(chunks):

@@ -117,13 +117,19 @@ async def run_analysis_task(analysis_id: int, recording_id: int):
                 # STEP 6: Build Final Report
                 chunks = []
                 for i, chunk_info in enumerate(chunk_structure["chunks"]):
+                    # Convert MinIO object key to presigned URL (valid for 24 hours)
+                    chunk_audio_presigned_url = storage_service.get_presigned_url(
+                        bucket=storage_service.bucket_recordings,
+                        object_key=chunk_object_keys[i]
+                    )
+                    
                     chunks.append(
                         ChunkInfo(
                             chunk_id=i,
                             chunk_type=chunk_info["chunk_type"],
                             time_range=[chunk_info["start"], chunk_info["end"]],
                             text=chunk_info["text"],
-                            audio_url=chunk_object_keys[i],
+                            audio_url=chunk_audio_presigned_url,
                             feedback=chunk_feedbacks[i]
                         )
                     )

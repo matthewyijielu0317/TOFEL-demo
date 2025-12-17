@@ -8,7 +8,17 @@ import {
 } from 'lucide-react';
 
 // API and Hooks
-import { fetchQuestions, uploadRecording, startAnalysis, getAnalysisResult, type Question, type AnalysisResponse } from '../services/api';
+import { 
+  fetchQuestions, 
+  uploadRecording, 
+  startAnalysis, 
+  getAnalysisResult, 
+  type Question, 
+  type AnalysisResponse,
+  type ChunkAnalysis,
+  type ReportJSONV2,
+  isReportV2
+} from '../services/api';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 
 // --- Fallback Mock Data (for development) ---
@@ -97,12 +107,14 @@ const App = () => {
   ]);
   
   // P5 Report State
-  const [expandedSentenceId, setExpandedSentenceId] = useState<number | null>(null); // Currently expanded sentence
+  const [expandedSentenceId, setExpandedSentenceId] = useState<number | null>(null); // Currently expanded sentence (V1)
+  const [expandedChunkId, setExpandedChunkId] = useState<number | null>(null); // Currently expanded chunk (V2)
   
   // P5 Audio Sync State
   const [currentPlayingSentence, setCurrentPlayingSentence] = useState<number | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [audioDuration, setAudioDuration] = useState<number>(45);
+  const [currentChunkAudio, setCurrentChunkAudio] = useState<HTMLAudioElement | null>(null);
 
   // NEW: Backend Integration State
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -198,16 +210,19 @@ const App = () => {
       audio.addEventListener('timeupdate', () => {
         setAudioProgress(audio.currentTime);
         
-        // P5: Update currently playing sentence based on time
+        // P5: Update currently playing sentence based on time (V1 only)
         if (currentStep === 'report' && analysisReport?.report_json) {
-          const current = analysisReport.report_json.sentence_analyses.find(
-            (s: any) => audio.currentTime >= s.start_time && audio.currentTime < s.end_time
-          );
-          if (current) {
-            const idx = analysisReport.report_json.sentence_analyses.indexOf(current);
-            setCurrentPlayingSentence(idx);
-          } else {
-            setCurrentPlayingSentence(null);
+          const report = analysisReport.report_json;
+          if (!isReportV2(report) && report.sentence_analyses) {
+            const current = report.sentence_analyses.find(
+              (s: any) => audio.currentTime >= s.start_time && audio.currentTime < s.end_time
+            );
+            if (current) {
+              const idx = report.sentence_analyses.indexOf(current);
+              setCurrentPlayingSentence(idx);
+            } else {
+              setCurrentPlayingSentence(null);
+            }
           }
         }
       });
@@ -881,6 +896,111 @@ const App = () => {
     );
   };
 
+  // ChunkCard Component (V2)
+  interface ChunkCardProps {
+    chunk: ChunkAnalysis;
+    isExpanded: boolean;
+    onToggle: () => void;
+    onPlayAudio: () => void;
+  }
+
+  const ChunkCard: React.FC<ChunkCardProps> = ({ chunk, isExpanded, onToggle, onPlayAudio }) => {
+    const chunkTypeLabels: Record<string, string> = {
+      'opening_statement': '开头语',
+      'viewpoint': `观点 ${chunk.chunk_id}`
+    };
+    
+    const chunkTypeColors: Record<string, string> = {
+      'opening_statement': 'bg-purple-100 text-purple-700 border-purple-200',
+      'viewpoint': 'bg-blue-100 text-blue-700 border-blue-200'
+    };
+
+    return (
+      <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden hover:border-blue-300 transition-all">
+        {/* Header */}
+        <div className="p-4 bg-gray-50 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {/* Chunk Type Badge */}
+              <span className={`px-3 py-1 rounded-full text-sm font-medium border ${chunkTypeColors[chunk.chunk_type] || chunkTypeColors.viewpoint}`}>
+                {chunkTypeLabels[chunk.chunk_type] || `段落 ${chunk.chunk_id + 1}`}
+              </span>
+              
+              {/* Time Range */}
+              <span className="text-sm text-gray-500">
+                {chunk.time_range[0].toFixed(1)}s - {chunk.time_range[1].toFixed(1)}s
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {/* Play Audio Button */}
+              <button
+                onClick={onPlayAudio}
+                className="p-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+                title="播放此段音频"
+              >
+                <Volume2 className="w-4 h-4" />
+              </button>
+              
+              {/* Expand/Collapse Button */}
+              <button
+                onClick={onToggle}
+                className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Original Text */}
+        <div className="p-4 bg-blue-50 border-b border-blue-100">
+          <p className="text-gray-800 leading-relaxed">
+            {chunk.text}
+          </p>
+        </div>
+
+        {/* Feedback (Expandable) */}
+        {isExpanded && (
+          <div className="p-6 bg-white">
+            <div className="prose prose-sm max-w-none">
+              <ReactMarkdown>{chunk.feedback}</ReactMarkdown>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Toggle chunk expansion (V2)
+  const toggleChunk = (chunkId: number) => {
+    setExpandedChunkId(prev => prev === chunkId ? null : chunkId);
+  };
+
+  // Play chunk audio (V2)
+  const playChunkAudio = async (chunk: ChunkAnalysis) => {
+    try {
+      // Stop any currently playing audio
+      if (currentChunkAudio) {
+        currentChunkAudio.pause();
+        currentChunkAudio.currentTime = 0;
+      }
+      
+      // Backend already returns presigned URL, use directly
+      const audio = new Audio(chunk.audio_url);
+      setCurrentChunkAudio(audio);
+      
+      audio.addEventListener('ended', () => {
+        setCurrentChunkAudio(null);
+      });
+      
+      await audio.play();
+    } catch (error) {
+      console.error('Failed to play chunk audio:', error);
+      setApiError('Failed to play audio. Please try again.');
+    }
+  };
+
   const renderReport = () => {
     if (!analysisReport?.report_json) {
       return (
@@ -901,6 +1021,15 @@ const App = () => {
     }
     
     const report = analysisReport.report_json;
+    const isV2 = isReportV2(report);
+    
+    // Extract scores based on version
+    const totalScore = isV2 ? report.global_evaluation.total_score : report.total_score;
+    const level = isV2 ? report.global_evaluation.level : report.level;
+    const deliveryScore = isV2 ? report.global_evaluation.score_breakdown.delivery : report.delivery_score;
+    const languageScore = isV2 ? report.global_evaluation.score_breakdown.language_use : report.language_score;
+    const topicScore = isV2 ? report.global_evaluation.score_breakdown.topic_development : report.topic_score;
+    const overallSummary = isV2 ? report.global_evaluation.overall_summary : report.overall_summary;
     
     return (
       <div className="w-full max-w-5xl mx-auto h-full overflow-y-auto pb-24">
@@ -918,14 +1047,14 @@ const App = () => {
                   stroke="#3b82f6" 
                   strokeWidth="8" 
                   fill="transparent"
-                  strokeDasharray={`${(report.total_score/30)*402} 402`}
+                  strokeDasharray={`${(totalScore/30)*402} 402`}
                   strokeLinecap="round"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-5xl font-bold text-gray-900">{report.total_score}</span>
+                <span className="text-5xl font-bold text-gray-900">{totalScore}</span>
                 <span className="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded mt-1 uppercase">
-                  {report.level}
+                  {level}
                 </span>
               </div>
             </div>
@@ -934,15 +1063,15 @@ const App = () => {
             <div className="flex justify-between gap-2 text-center text-xs">
               <div className="flex-1 bg-gray-50 py-2 rounded-lg border">
                 <div className="text-gray-400 text-[10px]">Delivery</div>
-                <div className="font-bold text-blue-600">{report.delivery_score}/10</div>
+                <div className="font-bold text-blue-600">{deliveryScore}/10</div>
               </div>
               <div className="flex-1 bg-gray-50 py-2 rounded-lg border">
                 <div className="text-gray-400 text-[10px]">Language</div>
-                <div className="font-bold text-green-600">{report.language_score}/10</div>
+                <div className="font-bold text-green-600">{languageScore}/10</div>
               </div>
               <div className="flex-1 bg-gray-50 py-2 rounded-lg border">
                 <div className="text-gray-400 text-[10px]">Topic</div>
-                <div className="font-bold text-purple-600">{report.topic_score}/10</div>
+                <div className="font-bold text-purple-600">{topicScore}/10</div>
               </div>
             </div>
           </div>
@@ -956,15 +1085,55 @@ const App = () => {
               <div>
                 <h3 className="text-xs font-bold text-blue-200 uppercase tracking-widest mb-3">AI Summary</h3>
                 <p className="text-white font-medium leading-relaxed text-xl">
-                  {report.overall_summary}
+                  {overallSummary}
                 </p>
               </div>
             </div>
           </div>
         </div>
         
-        {/* Detailed Delivery Analysis - NEW */}
-        {report.delivery_analysis && (
+        {/* Global Evaluation Detailed Feedback (V2 Only) */}
+        {isV2 && report.global_evaluation.detailed_feedback && (
+          <div className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+            <div className="flex items-start gap-3">
+              <Sparkles className="w-6 h-6 text-indigo-600 mt-1 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">整体评价</h3>
+                <div className="prose prose-sm max-w-none text-gray-600">
+                  <ReactMarkdown>{report.global_evaluation.detailed_feedback}</ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Chunk-based Analysis (V2) */}
+        {isV2 && report.chunks && (
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <BookOpen className="w-5 h-5 text-gray-700" />
+              <h3 className="text-lg font-semibold text-gray-900">逐段分析</h3>
+              <span className="text-sm text-gray-500">
+                ({report.chunks.length} 个段落)
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {report.chunks.map((chunk) => (
+                <ChunkCard
+                  key={chunk.chunk_id}
+                  chunk={chunk}
+                  isExpanded={expandedChunkId === chunk.chunk_id}
+                  onToggle={() => toggleChunk(chunk.chunk_id)}
+                  onPlayAudio={() => playChunkAudio(chunk)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Detailed Delivery Analysis - V1 ONLY */}
+        {!isV2 && report.delivery_analysis && (
           <div className="bg-white rounded-2xl shadow-sm border p-6 mb-8">
             <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
               <Volume2 size={20} className="text-blue-600" />
@@ -995,8 +1164,8 @@ const App = () => {
           </div>
         )}
         
-        {/* Audio Timeline - NEW */}
-        {report.sentence_analyses && report.sentence_analyses.length > 0 && (
+        {/* Audio Timeline - V1 ONLY */}
+        {!isV2 && report.sentence_analyses && report.sentence_analyses.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border p-6 mb-8">
             <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
               <Clock size={20} className="text-blue-600" />
@@ -1058,7 +1227,8 @@ const App = () => {
           </div>
         )}
         
-        {/* Interactive Sentence Analysis */}
+        {/* Interactive Sentence Analysis - V1 ONLY */}
+        {!isV2 && report.sentence_analyses && (
         <div className="bg-white rounded-2xl shadow-sm border mb-8">
           <div className="p-6 border-b bg-gray-50/50">
             <h3 className="font-bold text-gray-800 text-lg">📝 逐句分析</h3>
@@ -1075,8 +1245,10 @@ const App = () => {
             ))}
           </div>
         </div>
+        )}
         
-        {/* Actionable Tips */}
+        {/* Actionable Tips - V1 ONLY */}
+        {!isV2 && report.actionable_tips && (
         <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 mb-8">
           <h3 className="text-lg font-bold text-blue-900 mb-4 flex items-center gap-2">
             <Star className="text-blue-600" size={20} />
@@ -1091,6 +1263,7 @@ const App = () => {
             ))}
           </ul>
         </div>
+        )}
         
         {/* Practice Again Button */}
         <div className="fixed bottom-6 left-0 right-0 flex justify-center pointer-events-none z-20">
