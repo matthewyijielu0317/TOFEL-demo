@@ -112,12 +112,13 @@ npm run dev
 
 ### 分析流程
 ```
-1. Whisper转录 → 获取文本和时间戳
-2. LLM内容分块 → 识别2-4个语义段落
-3. pydub音频切分 → 创建可播放的音频段
-4. 并行音频分析 → 全局+各段落同时分析
-5. Python计算评分 → total_score和level
-6. 前端展示 → 逐段分析+音频播放
+1. 上传转换 → 浏览器录音(WebM/MP4)转换为MP3存储
+2. Whisper转录 → 获取文本和时间戳
+3. LLM内容分块 → 识别2-4个语义段落
+4. pydub音频切分 → 从MP3创建可播放的音频段
+5. 并行音频分析 → 全局+各段落同时分析
+6. Python计算评分 → total_score和level
+7. 前端展示 → 逐段分析+音频播放
 ```
 
 ## 🏗️ 技术架构
@@ -125,10 +126,10 @@ npm run dev
 **后端:**
 - FastAPI + SQLAlchemy (异步ORM)
 - PostgreSQL (数据库)
-- MinIO (对象存储)
+- MinIO (对象存储 - 所有音频存储为MP3格式)
 - OpenAI Whisper (转录)
 - GPT-4o Audio Preview (发音分析)
-- pydub + ffmpeg (音频处理)
+- pydub + ffmpeg (音频处理 - 上传时转换为MP3)
 
 **前端:**
 - React 18 + TypeScript
@@ -298,8 +299,9 @@ docker-compose logs
 
 - `.env` 文件不要提交到 Git
 - OpenAI API Key 保密
-- 录音文件存储在 MinIO `toefl-recordings` bucket
-- 音频分块存储在 `chunks/{recording_id}/` 路径
+- 录音文件存储在 MinIO `toefl-recordings` bucket (统一为MP3格式)
+- 浏览器录音(WebM/MP4)在上传时自动转换为MP3
+- 音频分块存储在 `chunks/{recording_id}/` 路径 (MP3格式)
 - 评分逻辑: ≥24=Excellent, ≥18=Good, ≥14=Fair, <14=Weak
 
 ## 📈 未来增强
