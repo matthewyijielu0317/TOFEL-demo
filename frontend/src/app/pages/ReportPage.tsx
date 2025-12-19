@@ -6,6 +6,14 @@ import {
   Volume2, BookOpen
 } from 'lucide-react';
 import type { AnalysisResponse, ChunkAnalysis, ReportJSONV2 } from '../../services/api';
+import {
+  PronunciationSection,
+  GrammarSection,
+  ExpressionSection,
+  NotesSection,
+  TipsSection,
+  StrengthsSection
+} from '../components/feedback';
 
 // Report Page Props
 interface ReportPageProps {
@@ -131,10 +139,50 @@ export const ReportPage: React.FC<ReportPageProps> = ({
         </div>
 
         {isExpanded && (
-          <div className="p-6 bg-white">
-            <div className="prose prose-sm max-w-none">
-              <ReactMarkdown>{chunk.feedback}</ReactMarkdown>
+          <div className="p-6 bg-white space-y-6">
+            {/* Overall Summary */}
+            <div className="pb-4 border-b border-gray-200">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-5 h-5 text-blue-600" />
+                <h4 className="font-semibold text-gray-900">整体评价</h4>
+              </div>
+              <p className="text-gray-700 leading-relaxed">{chunk.feedback_structured.summary}</p>
             </div>
+
+            {/* Pronunciation Issues */}
+            {chunk.feedback_structured.pronunciation_issues && chunk.feedback_structured.pronunciation_issues.length > 0 && (
+              <PronunciationSection issues={chunk.feedback_structured.pronunciation_issues} />
+            )}
+
+            {/* Grammar Issues */}
+            {chunk.feedback_structured.grammar_issues.length > 0 && (
+              <GrammarSection issues={chunk.feedback_structured.grammar_issues} />
+            )}
+
+            {/* Expression Suggestions */}
+            {chunk.feedback_structured.expression_suggestions.length > 0 && (
+              <ExpressionSection suggestions={chunk.feedback_structured.expression_suggestions} />
+            )}
+
+            {/* Fluency Notes */}
+            {chunk.feedback_structured.fluency_notes && (
+              <NotesSection title="流利度评价" content={chunk.feedback_structured.fluency_notes} />
+            )}
+
+            {/* Content Notes */}
+            {chunk.feedback_structured.content_notes && (
+              <NotesSection title="内容逻辑" content={chunk.feedback_structured.content_notes} />
+            )}
+
+            {/* Actionable Tips */}
+            {chunk.feedback_structured.actionable_tips.length > 0 && (
+              <TipsSection tips={chunk.feedback_structured.actionable_tips} />
+            )}
+
+            {/* Strengths */}
+            {chunk.feedback_structured.strengths.length > 0 && (
+              <StrengthsSection strengths={chunk.feedback_structured.strengths} />
+            )}
           </div>
         )}
       </div>

@@ -10,7 +10,6 @@ from app.services.storage_service import storage_service
 from app.services.ai.asr import transcribe_audio, transcribe_audio_openai, segment_audio_by_chunks
 from app.services.ai.llm import (
     generate_report, 
-    generate_report_openai,
     chunk_transcript_by_content,
     analyze_full_audio,
     analyze_chunk_audio,
@@ -128,7 +127,7 @@ async def run_analysis_task(analysis_id: int, recording_id: int):
                             time_range=[chunk_info["start"], chunk_info["end"]],
                             text=chunk_info["text"],
                             audio_url=chunk_audio_presigned_url,
-                            feedback=chunk_feedbacks[i]
+                            feedback_structured=chunk_feedbacks[i]
                         )
                     )
                 
