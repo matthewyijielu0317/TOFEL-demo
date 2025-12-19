@@ -20,12 +20,21 @@ AI驱动的托福口语练习平台，提供基于内容分块的智能反馈和
 
 ### 前置要求
 
-- Python 3.10+ 
-- Node.js 18+
-- Docker & Docker Compose
+- **Python 3.10+**
+  ```bash
+  # 检查 Python 版本
+  python3 --version
+  
+  # ⚠️ 如果版本低于 3.10，需使用指定版本
+  # macOS/Linux: python3.10 或 python3.11 或 python3.12
+  ```
+- **Node.js 18+**
+- **Docker & Docker Compose**
 - **OpenAI API Key** (必需，用于 Whisper 转录)
+  - 获取地址: https://platform.openai.com/api-keys
 - **Gemini API Key** (可选，用于音频分析，推荐)
-- ffmpeg (用于音频处理)
+  - 获取地址: https://ai.google.dev/
+- **ffmpeg** (用于音频处理)
 
 ### 1. 启动 Docker 服务
 
@@ -53,11 +62,14 @@ ffmpeg -version
 
 ### 3. 配置后端
 
+#### 方式一：手动配置（推荐新用户）
+
 ```bash
 cd backend
 
-# 创建虚拟环境
+# 创建虚拟环境（使用 Python 3.10+）
 python3 -m venv .venv
+# 如果默认 Python 版本 < 3.10，使用：python3.10 -m venv .venv
 source .venv/bin/activate
 
 # 安装依赖
@@ -65,31 +77,59 @@ pip install uv
 uv pip install -e .
 
 # 配置环境变量
-cat > .env << EOF
-DATABASE_URL=postgresql+asyncpg://toefl:toefl123@localhost:5432/toefl_speaking
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin123
-MINIO_SECURE=false
-
-# AI 服务配置
-OPENAI_API_KEY=sk-your-openai-key-here
-GEMINI_API_KEY=your-gemini-key-here
-AUDIO_AI_PROVIDER=auto  # auto (推荐) | gemini | openai
-EOF
+cp .env.example .env
+# 然后编辑 .env 文件，填入你的 API Keys
 ```
 
-### 4. 启动后端
+**⚠️ 重要：编辑 `.env` 文件**
+
+打开 `backend/.env`，**必须**替换以下占位符：
+- `OPENAI_API_KEY`: 填入你的真实 OpenAI API key（必需）
+- `GEMINI_API_KEY`: 填入你的 Gemini API key（可选，推荐）
+
+不替换 API key 会导致 AI 功能无法使用（401 错误）。
+
+#### 方式二：一键初始化（自动化脚本）
 
 ```bash
-# 在 backend/ 目录下，虚拟环境已激活
+cd backend
+
+# 运行初始化脚本（会自动创建虚拟环境和运行迁移）
+./migrations/setup_dev.sh
+```
+
+⚠️ **注意**：此脚本会自动管理虚拟环境。如果 `.venv` 已存在会被删除重建。
+
+### 4. 运行数据库迁移
+
+```bash
+cd backend
+
+# 如果使用方式一手动配置，需要运行迁移
+./migrations/setup_dev.sh
+# 或者直接运行迁移（不重建虚拟环境）
+source .venv/bin/activate
+uv run python migrations/migrate.py
+```
+
+### 5. 启动后端
+
+```bash
+cd backend
+source .venv/bin/activate
 python main.py
 
 # 后端运行在: http://localhost:8000
 # API 文档: http://localhost:8000/docs
 ```
 
-### 5. 启动前端
+**其他启动方式**：
+```bash
+# 使用 uvicorn 直接启动（无需激活虚拟环境）
+uv run uvicorn app.app:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 6. 启动前端
 
 ```bash
 # 打开新终端
@@ -104,9 +144,33 @@ npm run dev
 # 前端运行在: http://localhost:5173
 ```
 
-### 6. 访问应用
+> 💡 **提示**：前端默认连接 `http://localhost:8000/api/v1`  
+> 如需修改 API 地址，创建 `frontend/.env` 并设置 `VITE_API_BASE_URL`
+
+### 7. 访问应用
 
 打开浏览器访问: **http://localhost:5173**
+
+## 🔍 验证安装
+
+完成上述步骤后，运行以下检查确保环境正确配置：
+
+```bash
+# 1. 检查 Docker 容器
+docker ps
+# 应该看到: toefl-postgres 和 toefl-minio
+
+# 2. 检查后端 API
+curl http://localhost:8000/api/v1/questions
+# 应该返回题目列表的 JSON
+
+# 3. 检查前端和 API 文档
+# 浏览器访问:
+# - http://localhost:5173 (前端应用)
+# - http://localhost:8000/docs (API 文档)
+```
+
+✅ 如果以上检查都通过，恭喜！环境配置成功
 
 ## 📊 V2 版本新特性
 
@@ -213,11 +277,38 @@ MINIO_SECURE=false
 
 ### 前端环境变量 (`frontend/.env`)
 
+前端有默认配置，本地开发**不需要**创建 `.env` 文件。
+
+如需自定义 API 地址，可创建 `frontend/.env`：
 ```env
 VITE_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
 ## 🐛 常见问题
+
+### Python 版本问题
+
+**问题**: 依赖安装失败，提示 Python 版本不满足要求
+```bash
+# 检查 Python 版本
+python3 --version
+
+# 如果 < 3.10，使用特定版本创建虚拟环境
+cd backend
+rm -rf .venv
+python3.10 -m venv .venv  # 或 python3.11, python3.12
+source .venv/bin/activate
+pip install uv
+uv pip install -e .
+```
+
+### API Key 配置问题
+
+**问题**: 401 错误 "Incorrect API key provided"
+- 检查 `backend/.env` 文件
+- 确保 `OPENAI_API_KEY` 已替换为真实的 API key
+- 不要使用占位符 `sk-your-openai-key-here`
+- 修改后需要重启后端服务
 
 ### 后端启动失败
 
@@ -227,6 +318,13 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 source .venv/bin/activate
 # 重新安装依赖
 uv pip install -e .
+```
+
+**问题**: `Address already in use` (端口 8000 被占用)
+```bash
+# 查找并停止占用端口的进程
+lsof -ti:8000 | xargs kill -9
+# 然后重新启动后端
 ```
 
 **问题**: 后端反复重启
