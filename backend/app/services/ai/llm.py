@@ -1,15 +1,13 @@
 """LLM service using Volcengine Doubao and OpenAI GPT-4o for multimodal analysis."""
 
-import httpx
 import json
 import base64
 import tempfile
 import os
 from app.config import settings
+from app.clients import get_openai_client, get_gemini_client, get_http_client
 from pydantic import BaseModel, Field
-from openai import AsyncOpenAI
 from pydub import AudioSegment
-from google import genai
 from google.genai import types
 from google.genai.types import GenerateContentConfig, Part, Content
 
@@ -174,15 +172,14 @@ async def analyze_full_audio_gemini(audio_url: str, question_text: str) -> Globa
     if not settings.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is not set")
     
-    # Create client
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    # Use singleton clients
+    client = get_gemini_client()
+    http_client = get_http_client()
     
-    # Download audio with extended timeout
-    timeout = httpx.Timeout(60.0, connect=10.0)  # 60s read, 10s connect
-    async with httpx.AsyncClient(timeout=timeout) as http_client:
-        response = await http_client.get(audio_url)
-        response.raise_for_status()
-        audio_bytes = response.content
+    # Download audio
+    response = await http_client.get(audio_url)
+    response.raise_for_status()
+    audio_bytes = response.content
     
     # Save to temp file
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
@@ -298,8 +295,8 @@ async def analyze_chunk_audio_gemini(
     if not settings.GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY is not set")
     
-    # Create client
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    # Use singleton Gemini client
+    client = get_gemini_client()
     
     # Write audio bytes to temp file for Gemini upload
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as temp_file:
@@ -500,7 +497,8 @@ async def chunk_transcript_by_content(
     if not settings.OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is not set")
     
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    # Use singleton OpenAI client
+    client = get_openai_client()
     
     # Format transcript with timestamps
     formatted_segments = "\n".join([
@@ -556,13 +554,14 @@ async def analyze_full_audio(audio_url: str, question_text: str) -> str:
     if not settings.OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is not set")
     
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    # Use singleton clients
+    client = get_openai_client()
+    http_client = get_http_client()
     
     # Download MP3 audio (already converted at upload time)
-    async with httpx.AsyncClient() as http_client:
-        response = await http_client.get(audio_url)
-        response.raise_for_status()
-        audio_bytes = response.content
+    response = await http_client.get(audio_url)
+    response.raise_for_status()
+    audio_bytes = response.content
     
     # Encode MP3 to base64 (no conversion needed)
     audio_base64 = base64.b64encode(audio_bytes).decode()
@@ -632,7 +631,8 @@ async def analyze_chunk_audio(
     if not settings.OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is not set")
 
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    # Use singleton OpenAI client
+    client = get_openai_client()
 
     # Encode audio bytes to base64 for OpenAI API
     audio_base64 = base64.b64encode(chunk_audio_bytes).decode()
@@ -741,7 +741,8 @@ async def parse_global_evaluation_to_json(
     if not settings.OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is not set")
     
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    # Use singleton OpenAI client
+    client = get_openai_client()
     
     # Step 1: LLM extracts component scores
     completion = await client.beta.chat.completions.parse(
@@ -811,7 +812,8 @@ async def parse_chunk_feedback_to_json(
     if not settings.OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is not set")
     
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    # Use singleton OpenAI client
+    client = get_openai_client()
     
     # Parse markdown into structured format
     completion = await client.beta.chat.completions.parse(
