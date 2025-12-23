@@ -16,6 +16,11 @@ class Question(Base):
     # Primary key - business key like "ind_001"
     question_id: Mapped[str] = mapped_column(String(50), primary_key=True)
     
+    # Question metadata for display
+    title: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    difficulty: Mapped[str | None] = mapped_column(String(20), nullable=True)  # EASY, MEDIUM, HARD
+    tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    
     # Question content
     instruction: Mapped[str] = mapped_column(Text, nullable=False)
     

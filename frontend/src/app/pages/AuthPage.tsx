@@ -140,7 +140,7 @@ export const AuthPage: React.FC = () => {
             
             {/* Score Cards */}
             <div className="space-y-3 mb-6">
-              {/* Delivery - 4.0 = 4 stars filled */}
+              {/* Delivery - 3.5/4.0 = 3 full + half star */}
               <div className="group bg-gradient-to-r from-blue-500/15 to-blue-500/5 backdrop-blur-sm rounded-2xl px-5 py-4 border border-blue-400/20 hover:border-blue-400/50 transition-all duration-300 hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -150,26 +150,33 @@ export const AuthPage: React.FC = () => {
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-base font-semibold text-blue-100">Delivery</span>
-                      {/* Star rating - 4 filled, 1 empty */}
+                      {/* Star rating - 4 stars total, 3 full + half */}
                       <div className="flex gap-1">
-                        {[...Array(5)].map((_, i) => (
+                        {[...Array(3)].map((_, i) => (
                           <Star 
                             key={i} 
                             size={16} 
-                            className={i < 4 ? "fill-blue-400 text-blue-400" : "text-blue-400/30"} 
+                            className="fill-blue-400 text-blue-400"
                           />
                         ))}
+                        {/* Half star (50%) */}
+                        <div className="relative">
+                          <Star size={16} className="text-blue-400/30" />
+                          <div className="absolute inset-0 overflow-hidden" style={{ width: '50%' }}>
+                            <Star size={16} className="fill-blue-400 text-blue-400" />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-baseline gap-0.5">
-                    <span className="text-2xl font-bold text-blue-300 tabular-nums">4.0</span>
-                    <span className="text-sm text-blue-400/50">/5.0</span>
+                    <span className="text-2xl font-bold text-blue-300 tabular-nums">3.5</span>
+                    <span className="text-sm text-blue-400/50">/4.0</span>
                   </div>
                 </div>
               </div>
               
-              {/* Language - 4.5 = 4 full + 1 half star */}
+              {/* Language - 3.5/4.0 = 3 full + half star */}
               <div className="group bg-gradient-to-r from-indigo-500/15 to-indigo-500/5 backdrop-blur-sm rounded-2xl px-5 py-4 border border-indigo-400/20 hover:border-indigo-400/50 transition-all duration-300 hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -179,19 +186,19 @@ export const AuthPage: React.FC = () => {
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-base font-semibold text-indigo-100">Language</span>
-                      {/* Star rating - 4 full + 1 half */}
+                      {/* Star rating - 4 stars total, 3 full + half */}
                       <div className="flex gap-1">
-                        {[...Array(4)].map((_, i) => (
+                        {[...Array(3)].map((_, i) => (
                           <Star 
                             key={i} 
                             size={16} 
                             className="fill-indigo-400 text-indigo-400"
                           />
                         ))}
-                        {/* Half star */}
+                        {/* Half star (50%) */}
                         <div className="relative">
                           <Star size={16} className="text-indigo-400/30" />
-                          <div className="absolute inset-0 overflow-hidden w-1/2">
+                          <div className="absolute inset-0 overflow-hidden" style={{ width: '50%' }}>
                             <Star size={16} className="fill-indigo-400 text-indigo-400" />
                           </div>
                         </div>
@@ -199,13 +206,13 @@ export const AuthPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex items-baseline gap-0.5">
-                    <span className="text-2xl font-bold text-indigo-300 tabular-nums">4.5</span>
-                    <span className="text-sm text-indigo-400/50">/5.0</span>
+                    <span className="text-2xl font-bold text-indigo-300 tabular-nums">3.5</span>
+                    <span className="text-sm text-indigo-400/50">/4.0</span>
                   </div>
                 </div>
               </div>
               
-              {/* Topic - 4.5 = 4 full + 1 half star */}
+              {/* Topic - 3.0/4.0 = 3 full stars */}
               <div className="group bg-gradient-to-r from-purple-500/15 to-purple-500/5 backdrop-blur-sm rounded-2xl px-5 py-4 border border-purple-400/20 hover:border-purple-400/50 transition-all duration-300 hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -215,28 +222,23 @@ export const AuthPage: React.FC = () => {
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-base font-semibold text-purple-100">Topic</span>
-                      {/* Star rating - 4 full + 1 half */}
+                      {/* Star rating - 4 stars total, 3 full + 1 empty */}
                       <div className="flex gap-1">
-                        {[...Array(4)].map((_, i) => (
+                        {[...Array(3)].map((_, i) => (
                           <Star 
                             key={i} 
                             size={16} 
                             className="fill-purple-400 text-purple-400"
                           />
                         ))}
-                        {/* Half star */}
-                        <div className="relative">
-                          <Star size={16} className="text-purple-400/30" />
-                          <div className="absolute inset-0 overflow-hidden w-1/2">
-                            <Star size={16} className="fill-purple-400 text-purple-400" />
-                          </div>
-                        </div>
+                        {/* Empty star */}
+                        <Star size={16} className="text-purple-400/30" />
                       </div>
                     </div>
                   </div>
                   <div className="flex items-baseline gap-0.5">
-                    <span className="text-2xl font-bold text-purple-300 tabular-nums">4.5</span>
-                    <span className="text-sm text-purple-400/50">/5.0</span>
+                    <span className="text-2xl font-bold text-purple-300 tabular-nums">3.0</span>
+                    <span className="text-sm text-purple-400/50">/4.0</span>
                   </div>
                 </div>
               </div>

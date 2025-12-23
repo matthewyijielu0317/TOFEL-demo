@@ -64,6 +64,9 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
 
 export interface Question {
   question_id: string;
+  title: string | null;
+  difficulty: 'EASY' | 'MEDIUM' | 'HARD' | null;
+  tags: string[] | null;
   instruction: string;
   audio_url: string;
   sos_keywords: string[];

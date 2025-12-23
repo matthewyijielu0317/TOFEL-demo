@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 class QuestionBase(BaseModel):
     """Base question schema."""
     instruction: str = Field(..., description="Question instruction text")
+    title: str | None = Field(None, description="Display title for the question")
+    difficulty: str | None = Field(None, description="Question difficulty: EASY, MEDIUM, or HARD")
+    tags: list[str] | None = Field(None, description="Tags for categorization")
     sos_keywords: list[str] | None = Field(None, description="SOS hint keywords")
     sos_starter: str | None = Field(None, description="SOS starter sentence")
 
