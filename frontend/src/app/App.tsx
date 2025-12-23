@@ -5,7 +5,7 @@ import { ChevronRight, AlertCircle, ChevronUp } from 'lucide-react';
 // Auth
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import { AuthPage } from './pages';
+import { AuthPage, PracticeLibraryPage } from './pages';
 
 // API and Hooks
 import { 
@@ -899,10 +899,22 @@ const QuestionPage = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex flex-col h-[calc(100vh-64px)] overflow-hidden relative">
-        <div className="flex-1 flex flex-col p-4 md:p-8 overflow-y-auto w-full mx-auto">
+      <main className="flex flex-col min-h-[calc(100vh-64px)] relative">
+        <div className="flex-1 flex flex-col p-4 md:p-8 w-full mx-auto">
           {renderCurrentPage()}
         </div>
+      </main>
+    </div>
+  );
+};
+
+// Practice Library Layout - wraps the library page with sidebar
+const PracticeLibraryLayout = () => {
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans pl-20 relative">
+      <Sidebar />
+      <main className="p-8">
+        <PracticeLibraryPage />
       </main>
     </div>
   );
@@ -914,16 +926,26 @@ const AppRoutes = () => {
   
   return (
     <Routes>
-      {/* Auth route - redirect to questions if already logged in */}
+      {/* Auth route - redirect to library if already logged in */}
       <Route 
         path="/auth" 
         element={
-          user ? <Navigate to={`/questions/${DEFAULT_QUESTION_ID}`} replace /> : <AuthPage />
+          user ? <Navigate to="/library" replace /> : <AuthPage />
         } 
       />
       
-      {/* Default redirect */}
-      <Route path="/" element={<Navigate to={`/questions/${DEFAULT_QUESTION_ID}`} replace />} />
+      {/* Default redirect to library (home page for logged-in users) */}
+      <Route path="/" element={<Navigate to="/library" replace />} />
+      
+      {/* Practice Library - main home page */}
+      <Route 
+        path="/library" 
+        element={
+          <ProtectedRoute>
+            <PracticeLibraryLayout />
+          </ProtectedRoute>
+        } 
+      />
       
       {/* Protected question routes */}
       <Route 

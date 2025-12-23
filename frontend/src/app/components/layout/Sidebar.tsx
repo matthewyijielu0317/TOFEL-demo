@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, BookOpen, BarChart2, LogOut } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -8,12 +8,14 @@ interface NavItemProps {
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
+  tooltip?: string;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, active, disabled, onClick }) => (
+const NavItem: React.FC<NavItemProps> = ({ icon, active, disabled, onClick, tooltip }) => (
   <button 
     disabled={disabled}
     onClick={onClick}
+    title={tooltip}
     className={`w-full aspect-square rounded-xl flex items-center justify-center transition-all duration-200 ${
       disabled 
         ? 'bg-gray-800/30 text-gray-600 cursor-not-allowed opacity-40' 
@@ -28,7 +30,12 @@ const NavItem: React.FC<NavItemProps> = ({ icon, active, disabled, onClick }) =>
 
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signOut } = useAuth();
+  
+  // Determine active nav item based on current path
+  const isLibraryActive = location.pathname === '/library';
+  const isPracticeActive = location.pathname.startsWith('/questions/');
   
   const handleSignOut = async () => {
     await signOut();
@@ -37,13 +44,31 @@ export const Sidebar: React.FC = () => {
   
   return (
     <div className="w-20 bg-gray-900 flex flex-col items-center py-8 z-30 h-screen fixed left-0 top-0 border-r border-gray-800">
-      <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center mb-10 shadow-lg shadow-blue-500/30">
+      <div 
+        className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center mb-10 shadow-lg shadow-blue-500/30 cursor-pointer hover:scale-105 transition-transform"
+        onClick={() => navigate('/library')}
+        title="Go to Practice Library"
+      >
         <span className="text-white font-bold text-xl">T</span>
       </div>
       <nav className="flex-1 flex flex-col gap-6 w-full px-2">
-        <NavItem icon={<Home size={20} />} disabled />
-        <NavItem icon={<BookOpen size={20} />} active />
-        <NavItem icon={<BarChart2 size={20} />} disabled />
+        <NavItem 
+          icon={<Home size={20} />} 
+          active={isLibraryActive}
+          onClick={() => navigate('/library')}
+          tooltip="Practice Library"
+        />
+        <NavItem 
+          icon={<BookOpen size={20} />} 
+          active={isPracticeActive}
+          onClick={() => isPracticeActive ? null : navigate('/library')}
+          tooltip="Current Practice"
+        />
+        <NavItem 
+          icon={<BarChart2 size={20} />} 
+          disabled 
+          tooltip="Statistics (Coming Soon)"
+        />
       </nav>
       <div className="mt-auto pb-4 px-2 w-full">
         <button

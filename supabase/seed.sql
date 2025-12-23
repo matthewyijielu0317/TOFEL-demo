@@ -63,9 +63,12 @@ INSERT INTO auth.identities (
 -- ============================================================
 -- Seed initial question data
 -- ============================================================
-INSERT INTO questions (question_id, instruction, sos_keywords, sos_starter, audio_url) VALUES
+INSERT INTO questions (question_id, title, difficulty, tags, instruction, sos_keywords, sos_starter, audio_url) VALUES
 (
     'question_01KCH9WP8W6TZXA5QXS1BFF6AS',
+    'Gap Year',
+    'MEDIUM',
+    '["Education", "Life Choice"]',
     'Students should take a gap year before entering university to gain work experience.',
     '["Financial Independence", "Career Clarity", "Real-world Experience", "Personal Growth"]',
     'Personally, I believe taking a gap year is beneficial because...',
@@ -73,6 +76,9 @@ INSERT INTO questions (question_id, instruction, sos_keywords, sos_starter, audi
 ),
 (
     'question_01KCH9WP8W6TZXA5QXS1BFF6AT',
+    'Urban vs Rural',
+    'EASY',
+    '["Lifestyle", "Society"]',
     'It is better to live in a small town than in a big city.',
     '["Quality of Life", "Cost of Living", "Community", "Career Opportunities"]',
     'In my opinion, living in a small town has several advantages...',
@@ -80,12 +86,18 @@ INSERT INTO questions (question_id, instruction, sos_keywords, sos_starter, audi
 ),
 (
     'question_01KCH9WP8W6TZXA5QXS1BFF6AV',
+    'Technology Impact',
+    'HARD',
+    '["Technology", "Modern Life"]',
     'Technology has made our lives more complicated rather than simpler.',
     '["Efficiency", "Information Overload", "Connectivity", "Learning Curve"]',
     'I believe that while technology has some drawbacks...',
     'question_01KCH9WP8W6TZXA5QXS1BFF6AV/audio.mp3'
 )
-ON CONFLICT (question_id) DO NOTHING;
+ON CONFLICT (question_id) DO UPDATE SET
+    title = EXCLUDED.title,
+    difficulty = EXCLUDED.difficulty,
+    tags = EXCLUDED.tags;
 
 -- ============================================================
 -- Seed sample recording data (for testing)

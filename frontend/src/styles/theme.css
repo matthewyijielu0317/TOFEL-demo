@@ -193,3 +193,13 @@
 .animate-spin-slow {
   animation: spin-slow 20s linear infinite;
 }
+
+/* Sound wave animation for playing indicator */
+@keyframes soundwave {
+  0%, 100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
