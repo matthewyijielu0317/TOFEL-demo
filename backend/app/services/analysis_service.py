@@ -3,10 +3,10 @@
 import asyncio
 import tempfile
 import os
-import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Callable, Awaitable
+from datetime import datetime, timezone
+from ulid import ULID
 from pydub import AudioSegment
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,7 +58,8 @@ async def run_streaming_analysis(
     db: AsyncSession,
     audio_file: AudioFile,
     question_id: str,
-    send_event: SSECallback
+    send_event: SSECallback,
+    user_id: str | None = None
 ) -> None:
     """
     Run the complete analysis workflow with SSE progress events.
@@ -74,6 +75,7 @@ async def run_streaming_analysis(
         audio_file: Audio file with data, filename and content_type
         question_id: The question ID being answered
         send_event: Async callback to send SSE events to client
+        user_id: The authenticated user's ID (from Supabase auth)
     """
     recording = None
     analysis = None
@@ -92,10 +94,12 @@ async def run_streaming_analysis(
         # Convert audio to MP3 for storage (in background while we proceed)
         mp3_data = await convert_audio_to_mp3(audio_file.data)
         
-        # Generate unique object key
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
-        object_key = f"recordings/{question_id}/{timestamp}_{unique_id}.mp3"
+        # Generate recording_id using ULID format
+        recording_id = f"recording_{ULID()}"
+        
+        # Generate object key: recordings/{user_id}/{question_id}/{recording_id}.mp3
+        user_folder = user_id if user_id else "anonymous"
+        object_key = f"recordings/{user_folder}/{question_id}/{recording_id}.mp3"
         
         # Upload MP3 to MinIO
         await storage_service.upload_audio(
@@ -105,38 +109,62 @@ async def run_streaming_analysis(
             content_type="audio/mpeg"
         )
         
-        # Create recording record using repository
+        # Create recording record using repository (with user ownership and explicit recording_id)
         recording = await RecordingRepository.create(
-            db, question_id=question_id, audio_url=object_key
+            db, 
+            question_id=question_id, 
+            audio_url=object_key, 
+            user_id=user_id,
+            recording_id=recording_id
         )
         
-        # Create analysis record using repository
+        # Create analysis record using repository (with user and question references)
         analysis = await AnalysisResultRepository.create(
-            db, recording_id=recording.id, status="processing"
+            db, 
+            recording_id=recording.recording_id, 
+            user_id=user_id,
+            question_id=question_id,
+            status="processing"
         )
         
         await db.commit()
         
         await send_event(SSEStepEvent(type="uploading", status="completed").to_sse())
         
-        # ========== STEP 2: TRANSCRIBING ==========
+        # ========== STEP 2: PARALLEL ASR + FULL AUDIO ANALYSIS ==========
         await send_event(SSEStepEvent(type="transcribing", status="start").to_sse())
-        
-        # Use original audio directly for Whisper (supports WebM, MP4, etc.)
-        # This avoids the quality loss from re-encoding
-        transcript_data = await transcribe_audio_openai_from_bytes(
-            audio_file.data, 
-            filename=audio_file.filename
-        )
-        
-        await send_event(SSEStepEvent(type="transcribing", status="completed").to_sse())
-        
-        # ========== STEP 3: ANALYZING ==========
-        await send_event(SSEStepEvent(type="analyzing", status="start").to_sse())
         
         question_instruction = question.instruction if question else ""
         
-        # Content-based chunking
+        # Get presigned URL for full audio (needed for global analysis)
+        full_audio_url = storage_service.get_presigned_url(
+            bucket=storage_service.bucket_recordings,
+            object_key=object_key
+        )
+        
+        # Start ASR and Full Audio Analysis in parallel
+        # create_task() immediately starts both tasks in the background
+        # Full Audio Analysis doesn't depend on ASR, so we can run them together
+        asr_task = asyncio.create_task(
+            transcribe_audio_openai_from_bytes(
+                audio_file.data, 
+                filename=audio_file.filename
+            )
+        )
+        full_audio_task = asyncio.create_task(
+            analyze_full_audio_unified(full_audio_url, question_instruction)
+        )
+        
+        # Wait for ASR to complete (chunking depends on it)
+        # Note: full_audio_task continues running in the background during this await
+        transcript_data = await asr_task
+        
+        await send_event(SSEStepEvent(type="transcribing", status="completed").to_sse())
+        
+        # ========== STEP 3: CONTENT CHUNKING ==========
+        await send_event(SSEStepEvent(type="analyzing", status="start").to_sse())
+        
+        # Content-based chunking (depends on ASR transcript)
         chunk_structure = await chunk_transcript_by_content(
             transcript_data, question_instruction
         )
@@ -146,17 +174,8 @@ async def run_streaming_analysis(
             mp3_data, chunk_structure["chunks"]
         )
         
-        # Get presigned URL for full audio (needed for global analysis)
-        full_audio_url = storage_service.get_presigned_url(
-            bucket=storage_service.bucket_recordings,
-            object_key=object_key
-        )
-        
-        # Parallel AI analysis
-        full_audio_task = asyncio.create_task(
-            analyze_full_audio_unified(full_audio_url, question_instruction)
-        )
-        
+        # ========== STEP 4: CHUNK AUDIO ANALYSIS ==========
+        # Analyze each chunk in parallel (independent of Full Audio Analysis)
         chunk_tasks = []
         for i, chunk_info in enumerate(chunk_structure["chunks"]):
             # Use in-memory chunk audio bytes directly
@@ -169,23 +188,26 @@ async def run_streaming_analysis(
             )
             chunk_tasks.append(task)
         
-        # Wait for all analyses
-        results = await asyncio.gather(full_audio_task, *chunk_tasks)
-        global_evaluation = results[0]
-        chunk_feedbacks = results[1:]
+        # Wait for all chunk analyses to complete
+        chunk_feedbacks = await asyncio.gather(*chunk_tasks)
+        
+        # Wait for Full Audio Analysis to complete (started in Step 2)
+        # By now, it has been running in parallel with ASR + chunking + chunk analysis
+        # It may already be complete, or we wait for the remaining time
+        global_evaluation = await full_audio_task
         
         await send_event(SSEStepEvent(type="analyzing", status="completed").to_sse())
-
-        # ========== STEP 4: GENERATING REPORT ==========
+        
+        # ========== STEP 5: GENERATING REPORT ==========
         await send_event(SSEStepEvent(type="generating", status="start").to_sse())
 
         # Clone voice and generate corrected audio for each chunk
-        print(f"[Voice Cloning] Starting voice cloning for recording {recording.id}...")
+        print(f"[Voice Cloning] Starting voice cloning for recording {recording.recording_id}...")
         cloned_audio_urls = await generate_cloned_chunk_audio(
             mp3_data=mp3_data,
             chunks=chunk_structure["chunks"],
             chunk_feedbacks=chunk_feedbacks,
-            recording_id=recording.id,
+            recording_id=recording.recording_id,
             question_id=question_id
         )
         print(f"[Voice Cloning] Completed. Generated {sum(1 for url in cloned_audio_urls if url)} cloned audio files")
@@ -226,7 +248,7 @@ async def run_streaming_analysis(
         # Reuse the presigned URL from step 3 (full_audio_url) for frontend playback
         await send_event(SSECompletedEvent(
             report=report_dict,
-            recording_id=recording.id,
+            recording_id=recording.recording_id,
             audio_url=full_audio_url
         ).to_sse())
         
@@ -307,7 +329,7 @@ async def generate_cloned_chunk_audio(
     mp3_data: bytes,
     chunks: list[dict],
     chunk_feedbacks: list,
-    recording_id: int,
+    recording_id: str,
     question_id: str
 ) -> list[str | None]:
     """
@@ -317,7 +339,7 @@ async def generate_cloned_chunk_audio(
         mp3_data: Full MP3 audio data for voice cloning
         chunks: Chunk structure from chunking
         chunk_feedbacks: Feedback for each chunk
-        recording_id: Recording ID for file naming
+        recording_id: Recording ID (ULID format) for file naming
         question_id: Question ID for file naming
 
     Returns:
@@ -369,7 +391,7 @@ async def generate_cloned_chunk_audio(
                     print(f"[Voice Cloning]   - Generated {len(cloned_audio_data)} bytes of audio")
 
                     # Upload to storage
-                    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
                     object_key = f"cloned/{question_id}/{recording_id}/chunk_{i}_{timestamp}.mp3"
 
                     await storage_service.upload_audio(

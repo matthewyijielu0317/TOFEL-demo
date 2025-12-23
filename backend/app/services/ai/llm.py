@@ -822,20 +822,22 @@ async def generate_corrected_text_for_chunk(
 
     corrections_text = "\n".join(corrections) if corrections else "No corrections needed."
 
-    prompt = f"""You are helping a TOEFL student improve their speaking.
+    prompt = f"""You are helping a TOEFL student improve their English speaking.
 
-Original text:
+Original English text:
 {chunk_text}
 
 Apply these corrections:
 {corrections_text}
 
-Generate the corrected version of the text. Keep the same general structure and ideas, but apply all the grammar and expression improvements. Output ONLY the corrected text, nothing else."""
+Generate the corrected version of the text IN ENGLISH. Keep the same general structure and ideas, but apply all the grammar and expression improvements.
+
+CRITICAL: Output ONLY the corrected ENGLISH text, nothing else. Do NOT translate to Chinese. The output must be in English."""
 
     response = await client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are a helpful TOEFL speaking coach. Generate corrected text based on feedback."},
+            {"role": "system", "content": "You are a helpful TOEFL speaking coach. Generate corrected ENGLISH text based on feedback. NEVER output Chinese text. The corrected text MUST be in English."},
             {"role": "user", "content": prompt}
         ],
         temperature=0.3,
