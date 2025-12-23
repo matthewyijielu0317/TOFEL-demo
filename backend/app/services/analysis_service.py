@@ -128,24 +128,40 @@ async def run_streaming_analysis(
         
         await send_event(SSEStepEvent(type="uploading", status="completed").to_sse())
         
-        # ========== STEP 2: TRANSCRIBING ==========
+        # ========== STEP 2: PARALLEL ASR + FULL AUDIO ANALYSIS ==========
         await send_event(SSEStepEvent(type="transcribing", status="start").to_sse())
-        
-        # Use original audio directly for Whisper (supports WebM, MP4, etc.)
-        # This avoids the quality loss from re-encoding
-        transcript_data = await transcribe_audio_openai_from_bytes(
-            audio_file.data, 
-            filename=audio_file.filename
-        )
-        
-        await send_event(SSEStepEvent(type="transcribing", status="completed").to_sse())
-        
-        # ========== STEP 3: ANALYZING ==========
-        await send_event(SSEStepEvent(type="analyzing", status="start").to_sse())
         
         question_instruction = question.instruction if question else ""
         
-        # Content-based chunking
+        # Get presigned URL for full audio (needed for global analysis)
+        full_audio_url = storage_service.get_presigned_url(
+            bucket=storage_service.bucket_recordings,
+            object_key=object_key
+        )
+        
+        # Start ASR and Full Audio Analysis in parallel
+        # create_task() immediately starts both tasks in the background
+        # Full Audio Analysis doesn't depend on ASR, so we can run them together
+        asr_task = asyncio.create_task(
+            transcribe_audio_openai_from_bytes(
+                audio_file.data, 
+                filename=audio_file.filename
+            )
+        )
+        full_audio_task = asyncio.create_task(
+            analyze_full_audio_unified(full_audio_url, question_instruction)
+        )
+        
+        # Wait for ASR to complete (chunking depends on it)
+        # Note: full_audio_task continues running in the background during this await
+        transcript_data = await asr_task
+        
+        await send_event(SSEStepEvent(type="transcribing", status="completed").to_sse())
+        
+        # ========== STEP 3: CONTENT CHUNKING ==========
+        await send_event(SSEStepEvent(type="analyzing", status="start").to_sse())
+        
+        # Content-based chunking (depends on ASR transcript)
         chunk_structure = await chunk_transcript_by_content(
             transcript_data, question_instruction
         )
@@ -155,17 +171,8 @@ async def run_streaming_analysis(
             mp3_data, chunk_structure["chunks"]
         )
         
-        # Get presigned URL for full audio (needed for global analysis)
-        full_audio_url = storage_service.get_presigned_url(
-            bucket=storage_service.bucket_recordings,
-            object_key=object_key
-        )
-        
-        # Parallel AI analysis
-        full_audio_task = asyncio.create_task(
-            analyze_full_audio_unified(full_audio_url, question_instruction)
-        )
-        
+        # ========== STEP 4: CHUNK AUDIO ANALYSIS ==========
+        # Analyze each chunk in parallel (independent of Full Audio Analysis)
         chunk_tasks = []
         for i, chunk_info in enumerate(chunk_structure["chunks"]):
             # Use in-memory chunk audio bytes directly
@@ -178,14 +185,17 @@ async def run_streaming_analysis(
             )
             chunk_tasks.append(task)
         
-        # Wait for all analyses
-        results = await asyncio.gather(full_audio_task, *chunk_tasks)
-        global_evaluation = results[0]
-        chunk_feedbacks = results[1:]
+        # Wait for all chunk analyses to complete
+        chunk_feedbacks = await asyncio.gather(*chunk_tasks)
+        
+        # Wait for Full Audio Analysis to complete (started in Step 2)
+        # By now, it has been running in parallel with ASR + chunking + chunk analysis
+        # It may already be complete, or we wait for the remaining time
+        global_evaluation = await full_audio_task
         
         await send_event(SSEStepEvent(type="analyzing", status="completed").to_sse())
         
-        # ========== STEP 4: GENERATING REPORT ==========
+        # ========== STEP 5: GENERATING REPORT ==========
         await send_event(SSEStepEvent(type="generating", status="start").to_sse())
         
         # Build chunks with time_range (frontend uses this to play from original audio)
