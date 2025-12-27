@@ -402,3 +402,120 @@ def get_parse_chunk_feedback_system_prompt() -> str:
 5. `correction_explanation`: 改写理由
 
 注意：`corrected_text` 必须是英文，其他字段用中文。"""
+
+
+def get_viewpoint_extension_prompt(question_text: str, transcript_text: str) -> str:
+    """
+    Prompt for generating diverse viewpoint extensions that support the user's stance.
+    Uses TOEFL independent speaking scoring rubric.
+    """
+    return f"""你是托福独立口语的思维拓展教练，帮助学生积累多样化的观点和语料。
+
+### 题目
+{question_text}
+
+### 学生的回答（转录文本）
+{transcript_text}
+
+### 任务
+1. **识别立场**：学生支持还是反对题目观点？
+2. **生成拓展观点**：提供 3-5 个**与学生立场一致**但**从不同维度**支持该立场的观点
+
+### 拓展观点要求
+
+**重要原则：**
+- ✅ 与学生立场一致（如学生支持gap year，所有拓展观点也支持gap year）
+- ✅ 维度多样化（经济、心理、社会、实践、学术等不同角度）
+- ✅ 不能是学生已说过观点的延伸或重复
+- ✅ 词数要求：解释型50-60词，第一人称实例型70-90词
+- ✅ 包含具体例子或细节支撑（第一人称实例需要更详细）
+- ✅ 符合托福独立口语评分标准（见下方）
+- ✅ 美国人口语化表达，自然流畅
+
+**托福评分标准参考（4分标准）：**
+- **Delivery**: 语流顺畅，发音清晰，语调自然
+- **Language Use**: 使用基本和复杂语法结构，词汇丰富准确
+- **Topic Development**: 观点展开充分，逻辑连贯，细节详实
+
+### 示例（仅供参考格式，请根据实际题目生成）
+
+题目：学生是否应该在上大学前gap一年去工作？
+学生立场：支持
+学生已提观点：就业市场竞争激烈需要工作经验、帮助选择专业
+
+拓展观点示例：
+
+**示例1（解释论证型，~55词）：**
+{{
+  "dimension": "经济负担的缓解",
+  "viewpoint_text": "Taking a gap year to work can significantly alleviate the financial burden of college. Students can earn money to cover tuition, books, or living expenses, reducing the need for student loans. For example, saving several thousand dollars from a year of full-time work could mean less debt after graduation."
+}}
+
+**示例2（第一人称实例型，~85词）：**
+{{
+  "dimension": "实践技能的积累",
+  "viewpoint_text": "Working during a gap year builds essential real-world skills. I spent eight months working at a local café where I learned to manage my schedule, handle difficult customers, and work efficiently under pressure. For instance, during busy weekend shifts, I had to juggle taking orders, making drinks, and managing complaints all at once. These skills have been incredibly valuable in college—now when I'm balancing multiple assignments and extracurriculars, I know how to stay calm and prioritize effectively."
+}}
+
+### 论证方式说明
+
+观点展开通常有两种有效方式：
+
+**1. 解释论证型**（如示例1）：
+- 结构：观点陈述 → 逻辑解释 → 假设性例子
+- 适合：抽象概念（经济、社会影响等）
+- 长度：50-60词左右
+- 表达：用"students can", "for example", "this allows"等
+- 特点：简洁、逻辑清晰
+
+**2. 第一人称实例型**（如示例2）：
+- 结构：清晰观点陈述（1句话）→ "我"的详细经历
+- 适合：个人成长、技能、经验类话题
+- 长度：70-90词（需要具体细节，**不超过90词**）
+- 关键要素：
+  * 具体场景：where（café, rural village, tech company）
+  * 具体行动：what（managed schedules, taught children, collaborated with teams）
+  * 具体感受/结果：impact（felt recharged, learned to prioritize, gained confidence）
+- 表达：用"I worked/volunteered/spent time..."开头
+- 特点：更真实、更有说服力，可以适当构建合理的经历但要让人觉得可信
+- 细节示例：不说"got work experience"，而说"worked at a local café, managed schedules, handled complaints"
+
+### 生成要求
+
+请根据题目生成 3-5 个拓展观点，**严格遵循以下分布：**
+
+- **观点类型分布：2-3个第一人称实例型 + 1-2个解释论证型**
+- **优先生成第一人称实例型**，这类观点更有说服力
+- 第一人称例子必须包含：
+  * 具体场景（where）
+  * 具体行动（what）
+  * 具体感受/结果（impact）
+- 避免空泛表达，多用细节动词和名词
+- **词数要求：**
+  * 解释论证型：50-60词
+  * 第一人称实例型：70-90词（不超过90词）
+- 确保维度多样化，不要重复学生已说的角度
+
+### 输出格式
+
+请返回JSON格式：
+
+{{
+  "user_stance": "支持/反对 [简短描述学生立场]",
+  "extensions": [
+    {{
+      "dimension": "5-10字中文短语，概括思考角度",
+      "viewpoint_text": "英文观点阐述（解释型50-60词，实例型70-90词）"
+    }},
+    // ... 3-5个拓展观点
+  ]
+}}
+
+**重要提醒：**
+- dimension 是中文短语，用于概括这个观点的思考角度
+- viewpoint_text 必须是英文
+- **确保生成2-3个第一人称实例型观点**
+- 第一人称实例要有真实感，细节要具体
+- 语言要口语化，避免书面语或过于复杂的句式
+- 确保维度多样化，不要重复学生已说的角度
+"""

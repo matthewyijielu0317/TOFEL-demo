@@ -14,6 +14,7 @@ from app.services.ai.prompts import (
     get_chunk_audio_analysis_prompt_openai,
     get_parse_global_evaluation_system_prompt,
     get_parse_chunk_feedback_system_prompt,
+    get_viewpoint_extension_prompt,
 )
 from pydantic import BaseModel, Field
 from pydub import AudioSegment
@@ -43,6 +44,18 @@ class ChunkFeedbackStructured(BaseModel):
 
     # 5. 改进解读 (Why It's Better)
     correction_explanation: str = Field(..., description="Explanation of why the corrected version is better (in Chinese).")
+
+
+class ViewpointExtension(BaseModel):
+    """Single extended viewpoint with example."""
+    dimension: str = Field(..., description="5-10字中文短语，概括这个观点的思考角度，如'经济层面的考量'、'心理成长与抗压'")
+    viewpoint_text: str = Field(..., description="50-70 words supporting argument in conversational American English")
+
+
+class ViewpointExtensions(BaseModel):
+    """Collection of extended viewpoints for the same stance."""
+    user_stance: str = Field(..., description="User's position on the question")
+    extensions: list[ViewpointExtension] = Field(..., description="3-5 diverse supporting viewpoints")
 
 
 class GlobalEvaluationLLM(BaseModel):
@@ -88,6 +101,7 @@ class ToeflReportV2(BaseModel):
     global_evaluation: GlobalEvaluation
     full_transcript: FullTranscript
     chunks: list[ChunkInfo]
+    viewpoint_extensions: ViewpointExtensions | None = Field(None, description="Extended viewpoints for thought expansion")
 
 
 # --- V2 Functions for Content-Aware Chunking ---
@@ -710,6 +724,56 @@ async def analyze_chunk_audio_unified(
         )
         # Step 2: Parse to structured JSON
         return await parse_chunk_feedback_to_json(feedback_text, chunk_text, chunk_type)
+
+
+async def generate_viewpoint_extensions(
+    transcript_text: str,
+    question_instruction: str
+) -> ViewpointExtensions | None:
+    """
+    Generate diverse viewpoint extensions to help students expand their thinking.
+    
+    Args:
+        transcript_text: Full transcription of user's speech
+        question_instruction: The question text
+        
+    Returns:
+        ViewpointExtensions with 3-5 diverse supporting viewpoints, or None if failed
+    """
+    try:
+        prompt = get_viewpoint_extension_prompt(question_instruction, transcript_text)
+        
+        # Prefer Gemini 2.5 Flash for text generation, fallback to OpenAI
+        if settings.GEMINI_API_KEY:
+            client = get_gemini_client()
+            response = await client.aio.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ViewpointExtensions,
+                    temperature=0.8
+                )
+            )
+            return ViewpointExtensions.model_validate_json(response.text)
+        elif settings.OPENAI_API_KEY:
+            client = get_openai_client()
+            response = await client.beta.chat.completions.parse(
+                model="gpt-4o-2024-08-06",
+                messages=[
+                    {"role": "system", "content": "You are a TOEFL speaking coach generating diverse viewpoint extensions."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format=ViewpointExtensions,
+                temperature=0.8  # Higher temperature for diversity
+            )
+            return response.choices[0].message.parsed
+        else:
+            raise ValueError("No AI provider API key configured (GEMINI_API_KEY or OPENAI_API_KEY required)")
+            
+    except Exception as e:
+        print(f"[Viewpoint Extensions] Failed to generate: {e}")
+        return None
 
 
 # --- Legacy / Volcengine Logic ---
