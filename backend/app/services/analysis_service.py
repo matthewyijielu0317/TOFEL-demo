@@ -18,6 +18,7 @@ from app.services.ai.llm import (
     chunk_transcript_by_content,
     analyze_full_audio_unified,
     analyze_chunk_audio_unified,
+    generate_viewpoint_extensions,
     ToeflReportV2,
     FullTranscript,
     ChunkInfo
@@ -157,19 +158,26 @@ async def run_streaming_analysis(
             clone_user_voice(mp3_data, recording.recording_id)
         )
         
-        # Wait for ASR to complete (chunking depends on it)
+        # Wait for ASR to complete (chunking and extensions depend on it)
         # Note: full_audio_task and voice_clone_task continue running in the background
         transcript_data = await asr_task
         
         await send_event(SSEStepEvent(type="transcribing", status="completed").to_sse())
         
-        # ========== STEP 3: CONTENT CHUNKING ==========
+        # ========== STEP 3: PARALLEL CHUNKING + VIEWPOINT EXTENSIONS ==========
         await send_event(SSEStepEvent(type="analyzing", status="start").to_sse())
         
-        # Content-based chunking (depends on ASR transcript)
-        chunk_structure = await chunk_transcript_by_content(
-            transcript_data, question_instruction
+        # Start both chunking and extensions in parallel (both need transcript)
+        chunking_task = asyncio.create_task(
+            chunk_transcript_by_content(transcript_data, question_instruction)
         )
+        extensions_task = asyncio.create_task(
+            generate_viewpoint_extensions(transcript_data["text"], question_instruction)
+        )
+        
+        # Wait for chunking to complete (chunk analysis depends on it)
+        # Note: extensions_task continues running in the background
+        chunk_structure = await chunking_task
         
         # Audio segmentation - in-memory only (not stored to MinIO)
         chunk_audio_list = segment_audio_by_chunks_from_bytes(
@@ -245,6 +253,9 @@ async def run_streaming_analysis(
                 )
             )
         
+        # Wait for viewpoint extensions to complete (started in Step 3)
+        viewpoint_extensions = await extensions_task
+        
         # Build final report
         final_report = ToeflReportV2(
             global_evaluation=global_evaluation,
@@ -252,7 +263,8 @@ async def run_streaming_analysis(
                 text=transcript_data["text"],
                 segments=transcript_data["segments"]
             ),
-            chunks=chunks
+            chunks=chunks,
+            viewpoint_extensions=viewpoint_extensions
         )
         
         report_dict = final_report.model_dump()

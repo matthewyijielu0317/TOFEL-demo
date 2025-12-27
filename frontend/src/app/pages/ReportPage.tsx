@@ -6,7 +6,7 @@ import {
   Volume2, BookOpen, Play, Pause,
   Mic, MessageSquare, Target
 } from 'lucide-react';
-import type { AnalysisResponse, ChunkAnalysis, ReportJSONV2 } from '../../services/api';
+import type { AnalysisResponse, ChunkAnalysis, ReportJSONV2, ViewpointExtensions } from '../../services/api';
 import {
   ChunkFeedbackCoach
 } from '../components/feedback';
@@ -92,6 +92,64 @@ const ScoreDimensionCard: React.FC<ScoreDimensionCardProps> = ({
           </p>
         </div>
       )}
+    </div>
+  );
+};
+
+// Viewpoint Extensions Section Component
+interface ViewpointExtensionsSectionProps {
+  extensions: ViewpointExtensions;
+}
+
+const ViewpointExtensionsSection: React.FC<ViewpointExtensionsSectionProps> = ({ extensions }) => {
+  return (
+    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl p-8 border-2 border-blue-100">
+      {/* Section Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+          <Sparkles size={20} className="text-white" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-gray-800">思维拓展</h3>
+          <p className="text-sm text-gray-600">基于你的立场，这里有更多支持性观点供参考</p>
+        </div>
+      </div>
+
+      {/* User Stance */}
+      <div className="mb-6 p-4 bg-white rounded-xl border border-blue-200">
+        <span className="text-sm font-medium text-gray-600">你的立场：</span>
+        <span className="ml-2 text-gray-800">{extensions.user_stance}</span>
+      </div>
+
+      {/* Extensions Grid */}
+      <div className="grid grid-cols-1 gap-4">
+        {extensions.extensions.map((ext, index) => (
+          <div 
+            key={index}
+            className="p-5 rounded-xl border-2 bg-white border-blue-200 transition-all hover:shadow-md hover:border-blue-300"
+          >
+            {/* Dimension Badge */}
+            <div className="flex items-center gap-2 mb-3">
+              <Target size={18} className="text-blue-600" />
+              <span className="text-sm font-semibold text-gray-700">
+                观点 {index + 1}: {ext.dimension}
+              </span>
+            </div>
+            
+            {/* Viewpoint Text */}
+            <p className="text-gray-700 leading-relaxed text-[15px]">
+              {ext.viewpoint_text}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Tip */}
+      <div className="mt-6 p-4 bg-white/60 rounded-xl border border-blue-200">
+        <p className="text-sm text-gray-600 leading-relaxed">
+          💡 <span className="font-medium">使用建议：</span>这些观点来自不同维度，可以帮助你在下次遇到类似题目时，快速构建更全面的论证。建议记住其中的关键短语和例子。
+        </p>
+      </div>
     </div>
   );
 };
@@ -681,6 +739,13 @@ export const ReportPage: React.FC<ReportPageProps> = ({
           <div className="space-y-4">
             {report.chunks.map((chunk) => renderChunkCard(chunk))}
           </div>
+
+          {/* Viewpoint Extensions Section */}
+          {report.viewpoint_extensions && (
+            <div className="mt-8">
+              <ViewpointExtensionsSection extensions={report.viewpoint_extensions} />
+            </div>
+          )}
         </div>
       )}
       

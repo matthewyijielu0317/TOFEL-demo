@@ -126,11 +126,22 @@ export interface ChunkAnalysis {
   cloned_audio_url?: string;  // URL to cloned voice audio (corrected version)
 }
 
+export interface ViewpointExtension {
+  dimension: string;
+  viewpoint_text: string;
+}
+
+export interface ViewpointExtensions {
+  user_stance: string;
+  extensions: ViewpointExtension[];
+}
+
 export interface ReportJSONV2 {
   analysis_version: string;
   global_evaluation: GlobalEvaluation;
   full_transcript: FullTranscript;
   chunks: ChunkAnalysis[];
+  viewpoint_extensions?: ViewpointExtensions;
 }
 
 // Legacy V1 interfaces (kept for backward compatibility)
